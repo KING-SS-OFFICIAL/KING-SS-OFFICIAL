@@ -15,9 +15,9 @@ const AccountGenerationSetupScreen = ({ navigation }) => {
     }
 
     // In a real app, this would start the backend process
-    Alert.alert('Success', 'Starting account generation process...', [
-      { text: 'OK', onPress: () => navigation.navigate('Dashboard') }
-    ]);
+    // Navigate directly for smoother UX and better testing compatibility
+    console.log('Starting account generation...');
+    navigation.navigate('Dashboard');
   };
 
   return (
