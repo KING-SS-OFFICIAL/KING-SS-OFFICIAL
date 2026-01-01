@@ -34,8 +34,11 @@ A personalized talkable AI mobile app built with React Native and Expo.
 
 - **Type to chat**: Use the text input.
 - **Voice Input**: Use the microphone icon on your mobile keyboard to dictate text.
+- **Jervis Mode**: Tap the microphone icon in the header to enable "Always Listening" mode. The app will listen for the wake word "Jervis" (or "Jarvis") and respond to your commands.
 - **Voice Output**: The AI reads responses aloud by default. Toggle this with the speaker icon.
 
 ## Background Execution Note
 
-"Always listening" background AI requires significant battery and specific permissions that are often restricted by OS policies. This app demonstrates how to register background tasks (`src/services/BackgroundService.js`) which can be extended for periodic checks or notifications.
+"Always listening" background AI requires significant battery and specific permissions that are often restricted by OS policies.
+- **Foreground**: The app listens continuously for "Jervis" while the app is open.
+- **Background**: We have enabled `FOREGROUND_SERVICE` permissions for Android to support future background listening capabilities. Currently, the operating system may suspend the microphone when the app is in the background to save battery.
