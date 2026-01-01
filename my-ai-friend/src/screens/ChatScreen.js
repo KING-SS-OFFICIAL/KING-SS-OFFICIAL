@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Modal, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { GiftedChat, Bubble } from 'react-native-gifted-chat';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio } from 'expo-av';
 
 import AIService from '../services/AIService';
 import VoiceService from '../services/VoiceService';
+import SpeechRecognitionService from '../services/SpeechRecognitionService';
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState([]);
@@ -15,9 +17,27 @@ export default function ChatScreen() {
 
   // Voice toggle state (auto-read responses)
   const [autoSpeak, setAutoSpeak] = useState(true);
+  const [isListening, setIsListening] = useState(false);
+  const [isProcessingCommand, setIsProcessingCommand] = useState(false);
+
+  // Refs for checking state inside event listeners
+  const isListeningRef = useRef(false);
+  const isProcessingCommandRef = useRef(false);
+
+  // Update refs when state changes
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
+  useEffect(() => {
+    isProcessingCommandRef.current = isProcessingCommand;
+  }, [isProcessingCommand]);
 
   useEffect(() => {
     loadSettings();
+    requestPermissions();
+    const cleanupSpeech = setupSpeechRecognition();
+
     setMessages([
       {
         _id: 1,
@@ -29,7 +49,80 @@ export default function ChatScreen() {
         },
       },
     ]);
+
+    return () => {
+      cleanupSpeech && cleanupSpeech();
+      SpeechRecognitionService.destroy(); // Ensure native voice module is stopped
+    };
   }, []);
+
+  const requestPermissions = async () => {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'This app needs microphone access to talk to you!');
+      }
+    } catch (e) {
+      console.log('Error requesting permissions:', e);
+    }
+  };
+
+  const setupSpeechRecognition = () => {
+    const unsubWake = SpeechRecognitionService.on('wake_word_detected', async (text) => {
+      console.log("Wake word detected:", text);
+      VoiceService.stop(); // Stop speaking if currently speaking
+      setIsProcessingCommand(true);
+      // VoiceService.speak("Yes?");
+    });
+
+    const unsubResult = SpeechRecognitionService.on('result', async (text) => {
+      // Use ref to check current state
+      if (isProcessingCommandRef.current) {
+        console.log("Command received:", text);
+        setIsProcessingCommand(false);
+        // Process the command
+        handleVoiceCommand(text);
+      }
+    });
+
+    const unsubEnd = SpeechRecognitionService.on('end', () => {
+       // Use ref to check current state
+       // If we were just listening for wake word, restart.
+       // If we were processing a command, we might be done or need to restart listening after response.
+       if (isListeningRef.current && !isProcessingCommandRef.current) {
+          SpeechRecognitionService.startListening();
+       }
+    });
+
+    return () => {
+      unsubWake();
+      unsubResult();
+      unsubEnd();
+    };
+  };
+
+  const handleVoiceCommand = (text) => {
+    const userMessage = {
+      _id: Math.round(Math.random() * 1000000),
+      text: text,
+      createdAt: new Date(),
+      user: {
+        _id: 1,
+        name: 'User',
+      },
+    };
+    onSend([userMessage]);
+  };
+
+  const toggleListening = async () => {
+    if (isListening) {
+      await SpeechRecognitionService.stopListening();
+      setIsListening(false);
+    } else {
+      await SpeechRecognitionService.startListening();
+      setIsListening(true);
+    }
+  };
 
   const loadSettings = async () => {
     const key = await AsyncStorage.getItem('OPENAI_API_KEY');
@@ -107,6 +200,9 @@ export default function ChatScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My AI Friend</Text>
         <View style={styles.headerButtons}>
+          <TouchableOpacity onPress={toggleListening} style={[styles.iconButton, isListening && styles.listeningButton]}>
+             <Text style={{fontSize: 20}}>{isListening ? (isProcessingCommand ? '👂' : '🎙️') : '🚫'}</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => setAutoSpeak(!autoSpeak)} style={styles.iconButton}>
              <Text style={{fontSize: 20}}>{autoSpeak ? '🔊' : '🔇'}</Text>
           </TouchableOpacity>
@@ -115,6 +211,14 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {isListening && (
+        <View style={styles.statusBanner}>
+          <Text style={styles.statusText}>
+            {isProcessingCommand ? "Listening for command..." : "Waiting for 'Jervis'..."}
+          </Text>
+        </View>
+      )}
 
       <GiftedChat
         messages={messages}
@@ -203,6 +307,23 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     marginLeft: 15,
+    padding: 5,
+    borderRadius: 20,
+  },
+  listeningButton: {
+    backgroundColor: '#e6f7ff',
+  },
+  statusBanner: {
+    backgroundColor: '#f0f0f0',
+    padding: 5,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+  },
+  statusText: {
+    fontSize: 12,
+    color: '#555',
+    fontStyle: 'italic',
   },
   centeredView: {
     flex: 1,
