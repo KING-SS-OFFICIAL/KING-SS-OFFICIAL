@@ -1,0 +1,5 @@
+**/node_modules
+shield-prep-wb/backend/node_modules
+shield-prep-wb/mobile/node_modules
+.env
+*.log
